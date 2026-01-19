@@ -1,18 +1,48 @@
 # media-subtitle-tools
-配合懒猫算力舱的字幕识别脚本
+
+基于懒猫算力舱的视频字幕识别工具集，支持语音识别（ASR）和光学字符识别（OCR）两种字幕提取方式。
 
 ## 准备工作
-1. 拥有一台懒猫算力舱设备，字幕识别脚本是基于懒猫算力舱上的faster-whisper-large-v2和PaddleOCR API实现的
-2. 需要在脚本所在电脑登录懒猫微服，并确保懒猫微服与算力舱是连通的
-3. 使用前确保算力舱相关服务接口网址是准确的，在脚本内搜索{这里填你的用户名}，把它替换为你的懒猫用户名
-如：https://ocr-ai.{这里填你的用户名}.heiyu.space/ocr，应该改为：https://ocr-ai.vito.heiyu.space/ocr
-https://asr-ai.{这里填你的用户名}.heiyu.space/v1/audio/transcriptions，应该改为：https://asr-ai.vito.heiyu.space/v1/audio/transcriptions
 
-## 一，whisper-large语音识别字幕
-video_asr_subtitle.py 是基于懒猫算力舱的视频语音字幕识别工具，使用 faster-whisper-large-v2 API 进行语音识别，生成SRT字幕文件。
-注意生成后的字幕会夹杂ASR识别错误，比如各种人名，名词同音词识别错误，这是技术原理决定的，需要配合大模型做精校。
+### 1. 硬件要求
+- 拥有一台懒猫算力舱设备
+- 字幕识别基于算力舱上的 **faster-whisper-large-v2** 和 **PaddleOCR** API 实现
 
-参考通用ASR字幕校对提示词
+### 2. 网络配置
+- 在脚本所在电脑登录懒猫微服
+- 确保懒猫微服与算力舱网络连通
+
+### 3. 接口配置
+使用前需要修改脚本中的服务接口地址：
+
+1. 在脚本中搜索 `{这里填你的用户名}`
+2. 替换为你的懒猫用户名
+
+**示例：**
+```
+修改前：https://ocr-ai.{这里填你的用户名}.heiyu.space/ocr
+修改后：https://ocr-ai.vito.heiyu.space/ocr
+
+修改前：https://asr-ai.{这里填你的用户名}.heiyu.space/v1/audio/transcriptions
+修改后：https://asr-ai.vito.heiyu.space/v1/audio/transcriptions
+```
+
+## 一、Whisper-Large 语音识别字幕
+
+### 工具说明
+`video_asr_subtitle.py` 是基于懒猫算力舱的视频语音字幕识别工具，使用 **faster-whisper-large-v2** API 进行语音识别，自动生成 SRT 字幕文件。
+
+### 注意事项
+⚠️ 生成的字幕可能包含 ASR 识别错误，常见问题包括：
+- 人名识别错误（同音字混淆）
+- 专有名词识别错误
+- 同音词误识
+
+这是语音识别技术原理决定的，建议配合大语言模型进行精校。
+
+### ASR 字幕校对提示词
+
+以下是通用的 ASR 字幕校对提示词模板，可直接复制使用：
 ```markdown
 你是一个专业的字幕校对助手。我会提供一份通过语音识别（ASR）生成的视频字幕文件（SRT格式），需要你进行智能校对和修正。
 
@@ -198,11 +228,17 @@ Running Mate
 [在此处粘贴SRT文件内容]
 ```
 
-## 二，Paddle OCR识别字幕
-video_subtitle_ocr.py 是基于懒猫算力舱的视频字幕OCR提取工具，使用FFmpeg抽帧 + PaddleOCR API识别字幕。
-OCR会带来对应的OCR识别同形错误，同样让大模型去做精校。
+## 二、PaddleOCR 字幕识别
 
-参考通用OCR字幕校对提示词
+### 工具说明
+`video_subtitle_ocr.py` 是基于懒猫算力舱的视频字幕 OCR 提取工具，使用 **FFmpeg 抽帧 + PaddleOCR API** 识别视频中的字幕文字。
+
+### 注意事项
+⚠️ OCR 识别可能产生形近字错误，建议配合大语言模型进行精校。
+
+### OCR 字幕校对提示词
+
+以下是通用的 OCR 字幕校对提示词模板，可直接复制使用：
 ```markdown
 你是一个专业的字幕校对助手。我会提供一份通过OCR识别的视频字幕文件（SRT格式），需要你进行智能校对和修正。
 
