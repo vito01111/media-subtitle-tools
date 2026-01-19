@@ -32,6 +32,31 @@
 ### 工具说明
 `video_asr_subtitle.py` 是基于懒猫算力舱的视频语音字幕识别工具，使用 **faster-whisper-large-v2** API 进行语音识别，自动生成 SRT 字幕文件。
 
+### 使用方法
+
+#### 基本用法
+```bash
+python video_asr_subtitle.py <视频文件路径>
+```
+
+#### 示例
+```bash
+# 处理单个视频文件
+python video_asr_subtitle.py movie.mp4
+
+# 处理指定路径的视频
+python video_asr_subtitle.py /path/to/video.mp4
+```
+
+#### 输出结果
+- 生成与视频同名的 `.srt` 字幕文件
+- 字幕文件保存在视频文件所在目录
+- 例如：`movie.mp4` → `movie.srt`
+
+#### 支持的视频格式
+- MP4、AVI、MKV、MOV、FLV 等常见视频格式
+- 只要包含音频轨道即可识别
+
 ### 注意事项
 ⚠️ 生成的字幕可能包含 ASR 识别错误，常见问题包括：
 - 人名识别错误（同音字混淆）
@@ -232,6 +257,37 @@ Running Mate
 
 ### 工具说明
 `video_subtitle_ocr.py` 是基于懒猫算力舱的视频字幕 OCR 提取工具，使用 **FFmpeg 抽帧 + PaddleOCR API** 识别视频中的字幕文字。
+
+### 使用方法
+
+#### 基本用法
+```bash
+python video_subtitle_ocr.py <视频文件路径>
+```
+
+#### 示例
+```bash
+# 处理单个视频文件
+python video_subtitle_ocr.py movie.mp4
+
+# 处理指定路径的视频
+python video_subtitle_ocr.py /path/to/video.mp4
+```
+
+#### 工作原理
+1. 使用 FFmpeg 从视频中按时间间隔抽取帧画面
+2. 将每一帧发送到 PaddleOCR API 进行文字识别
+3. 提取画面中的字幕文字并生成 SRT 文件
+
+#### 输出结果
+- 生成与视频同名的 `.srt` 字幕文件
+- 字幕文件保存在视频文件所在目录
+- 例如：`movie.mp4` → `movie.srt`
+
+#### 适用场景
+- 视频中有硬字幕（烧录在画面中的字幕）
+- 需要提取外语视频的原文字幕
+- 视频没有音频或音频质量差，但有可见字幕
 
 ### 注意事项
 ⚠️ OCR 识别可能产生形近字错误，建议配合大语言模型进行精校。
