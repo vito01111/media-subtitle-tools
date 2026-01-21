@@ -4,6 +4,7 @@
 基于懒猫算力舱的视频字幕OCR提取工具
 使用FFmpeg抽帧 + PaddleOCR API识别字幕
 使用前需要修改脚本中的服务接口地址：在脚本中搜索 {这里填你的用户名}，替换为你的懒猫用户名。
+新增接口health检查机制，避免服务冷启动时，前几张图片识别失败
 """
 
 import os
@@ -32,7 +33,7 @@ if sys.platform == 'win32':
 
 # ==================== 配置参数 ====================
 # 可通过环境变量覆盖
-FRAME_INTERVAL = int(os.getenv('FRAME_INTERVAL', '5'))  # 抽帧间隔（秒）
+FRAME_INTERVAL = int(os.getenv('FRAME_INTERVAL', '3'))  # 抽帧间隔（秒）
 MAX_WORKERS = int(os.getenv('MAX_WORKERS', '8'))  # 并发线程数
 SIMILARITY_THRESHOLD = float(os.getenv('SIMILARITY_THRESHOLD', '0.8'))  # 字幕相似度阈值
 NOISE_THRESHOLD = float(os.getenv('NOISE_THRESHOLD', '0.05'))  # 噪声过滤阈值（5%）
@@ -152,42 +153,87 @@ class SubtitleOCR:
         print(f"✅ 抽帧完成: {len(frames)}帧 | 耗时: {self.stats['extract_time']:.1f}秒")
         return frames
 
+    def wait_for_service_ready(self, max_wait: int = 10) -> bool:
+        """等待OCR服务就绪"""
+        print(f"\n🔗 检测OCR服务...")
+
+        # 构建健康检查URL（只替换路径部分，不影响域名）
+        if OCR_API_URL.endswith('/ocr'):
+            health_url = OCR_API_URL[:-4] + '/health'
+        else:
+            # 如果URL格式不是预期的，尝试通用方法
+            from urllib.parse import urljoin, urlparse
+            parsed = urlparse(OCR_API_URL)
+            health_url = f"{parsed.scheme}://{parsed.netloc}/health"
+
+        print(f"   健康检查URL: {health_url}")
+        start = time.time()
+        attempt_count = 0
+
+        while time.time() - start < max_wait:
+            attempt_count += 1
+            try:
+                response = requests.get(health_url, timeout=3)
+                if response.status_code == 200:
+                    elapsed = time.time() - start
+                    print(f"✅ OCR服务已就绪 (耗时: {elapsed:.1f}秒)")
+                    return True
+                else:
+                    print(f"   尝试 {attempt_count}: HTTP {response.status_code}")
+            except Exception as e:
+                print(f"   尝试 {attempt_count}: {type(e).__name__}: {str(e)[:50]}")
+
+            time.sleep(2)
+
+        print(f"⚠️  OCR服务未就绪（超时 {max_wait}秒），继续执行（依赖重试机制）")
+        return False
+
     def call_ocr_api(self, image_path: Path) -> Optional[str]:
-        """调用PaddleOCR API识别文字"""
-        try:
-            with open(image_path, 'rb') as f:
-                files = {'file': (image_path.name, f, 'image/png')}
-                data = {
-                    'request': json.dumps({
-                        'max_size': 1920,
-                        'det': True,
-                        'rec': True,
-                        'cls': True
-                    })
-                }
+        """调用PaddleOCR API识别文字（带重试）"""
+        last_error = None
 
-                response = requests.post(
-                    OCR_API_URL,
-                    files=files,
-                    data=data,
-                    timeout=OCR_TIMEOUT
-                )
-                response.raise_for_status()
+        for attempt in range(OCR_MAX_RETRIES):
+            try:
+                with open(image_path, 'rb') as f:
+                    files = {'file': (image_path.name, f, 'image/png')}
+                    data = {
+                        'request': json.dumps({
+                            'max_size': 1920,
+                            'det': True,
+                            'rec': True,
+                            'cls': True
+                        })
+                    }
 
-                result = response.json()
-                if 'results' in result and result['results']:
-                    # 合并所有识别的文本
-                    texts = [item.get('text', '').strip() for item in result['results']]
-                    return ' '.join(filter(None, texts))
+                    response = requests.post(
+                        OCR_API_URL,
+                        files=files,
+                        data=data,
+                        timeout=OCR_TIMEOUT
+                    )
+                    response.raise_for_status()
 
-                return None
+                    result = response.json()
+                    if 'results' in result and result['results']:
+                        # 合并所有识别的文本
+                        texts = [item.get('text', '').strip() for item in result['results']]
+                        return ' '.join(filter(None, texts))
 
-        except requests.exceptions.Timeout:
-            print(f"⚠️  OCR超时: {image_path.name}")
-            return None
-        except Exception as e:
-            print(f"⚠️  OCR失败 {image_path.name}: {e}")
-            return None
+                    return None
+
+            except requests.exceptions.Timeout as e:
+                last_error = f"超时: {e}"
+            except Exception as e:
+                last_error = str(e)
+
+            # 如果不是最后一次尝试，等待后重试
+            if attempt < OCR_MAX_RETRIES - 1:
+                wait_time = (attempt + 1) * 1  # 1s, 2s, 3s
+                time.sleep(wait_time)
+
+        # 所有重试都失败
+        print(f"⚠️  OCR失败 {image_path.name}: {last_error}")
+        return None
 
     def process_frame(self, frame_info: Tuple[int, Path]) -> Optional[Tuple[float, str]]:
         """处理单帧：OCR识别"""
@@ -370,16 +416,19 @@ class SubtitleOCR:
             if not frames:
                 raise RuntimeError("未能抽取任何帧")
 
-            # 2. OCR识别
+            # 2. 等待OCR服务就绪
+            self.wait_for_service_ready()
+
+            # 3. OCR识别
             self.process_frames_parallel(frames)
 
-            # 3. 清洗数据
+            # 4. 清洗数据
             self.filter_noise()
 
-            # 4. 合并字幕
+            # 5. 合并字幕
             subtitles = self.merge_similar_subtitles()
 
-            # 5. 生成SRT
+            # 6. 生成SRT
             if subtitles:
                 self.generate_srt(subtitles)
             else:
